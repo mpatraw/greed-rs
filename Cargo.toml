@@ -1,0 +1,9 @@
+[package]
+name = "greedy"
+version = "0.1.0"
+authors = ["Michael Patraw <michaelpatraw@gmail.com>"]
+build = "build.rs"
+
+[dependencies]
+bear-lib-terminal = "1.3.3"
+rand = "*"
