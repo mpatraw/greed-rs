@@ -102,24 +102,6 @@ impl GreedyContext {
     }
 }
 
-fn print_tile(tile: Tile, x: i32, y: i32) {
-        match tile {
-            Tile::Rogue => {
-                terminal::set_foreground(Color::from_rgb(255, 0, 0));
-                terminal::put_xy(x, y, '@');
-            }
-            Tile::Gold(n) => {
-                let c = GOLD_COLORS[(n - 1) as usize];
-                let r = c[0];
-                let g = c[1];
-                let b = c[2];
-                terminal::set_foreground(Color::from_rgb(r, g, b));
-                terminal::put_xy(x, y, n.to_string().chars().nth(0).unwrap());
-            }
-            _ => {}
-        }
-}
-
 fn valid_moves(gc: &GreedyContext) -> Vec<Direction> {
     let mut dirs = vec![];
     let rx = gc.rogue_x;
@@ -158,7 +140,7 @@ fn move_rogue(gc: &mut GreedyContext, dir: Direction) {
         for _ in 1..n {
             x += dir.dx();
             y += dir.dy();
-            gc.set_tile(x, y, Tile::Empty)
+            gc.set_tile(x, y, Tile::Empty);
         }
     }
     gc.rogue_x = x;
@@ -166,15 +148,58 @@ fn move_rogue(gc: &mut GreedyContext, dir: Direction) {
     gc.set_tile(x, y, Tile::Rogue);
 }
 
+fn print_tile(tile: Tile, x: i32, y: i32, highlight: bool) {
+        match tile {
+            Tile::Rogue => {
+                terminal::set_foreground(Color::from_rgb(255, 0, 0));
+                terminal::set_background(Color::from_rgb(0, 0, 0));
+                terminal::put_xy(x, y, '@');
+            }
+            Tile::Gold(n) => {
+                let c = GOLD_COLORS[(n - 1) as usize];
+                let r = c[0];
+                let g = c[1];
+                let b = c[2];
+                terminal::set_foreground(Color::from_rgb(r, g, b));
+                if highlight {
+                    terminal::set_background(Color::from_rgb(196, 196, 196));
+                } else {
+                    terminal::set_background(Color::from_rgb(0, 0, 0));
+                }
+                terminal::put_xy(x, y, n.to_string().chars().nth(0).unwrap());
+            }
+            _ => {}
+        }
+}
+
 fn print_greedy(gc: &GreedyContext, xo: i32, yo: i32) {
     for x in 0..BOARD_WIDTH {
         for y in 0..BOARD_HEIGHT {
-            print_tile(gc.tile(x, y), x + xo, y + yo)
+            print_tile(gc.tile(x, y), x + xo, y + yo, false);
         }
     }
+    terminal::set_background(Color::from_rgb(0, 0, 0));
     terminal::print_xy(0, BOARD_HEIGHT + yo,
         &*format!("[color=white]Cleared: [color=yellow]{:.4}%",
             gc.cleared as f64 / (BOARD_WIDTH * BOARD_HEIGHT * 100) as f64));
+}
+
+fn print_moves(gc: &GreedyContext, xo: i32, yo: i32) {
+    let moves = valid_moves(gc);
+    let rx = gc.rogue_x;
+    let ry = gc.rogue_y;
+    for dir in moves {
+        let mut x = rx + dir.dx();
+        let mut y = ry + dir.dy();
+        if let Tile::Gold(n) = gc.tile(x, y) {
+            print_tile(gc.tile(x, y), x + xo, y + yo, true);
+            for _ in 1..n {
+                x += dir.dx();
+                y += dir.dy();
+                print_tile(gc.tile(x, y), x + xo, y + yo, true);
+            }
+        }
+    }
 }
 
 fn roll(dice: i32, sides: i32) -> i32 {
@@ -196,14 +221,33 @@ fn setup_game(gc: &mut GreedyContext) {
     gc.set_tile(rx, ry, Tile::Rogue);
 }
 
+fn end_game(gc: &GreedyContext, show_moves: bool) {
+    terminal::set_background(Color::from_rgb(0, 0, 0));
+    terminal::clear(None);
+    print_greedy(&gc, 0, 0);
+    if show_moves {
+        print_moves(&gc, 0, 0);
+    }
+    terminal::set_background(Color::from_rgb(0, 0, 0));
+    terminal::print_xy(BOARD_WIDTH / 2, BOARD_HEIGHT,
+        &*format!("[color=red]No more moves. Press any key to quit."));
+    terminal::refresh();
+    let _ = terminal::wait_event();
+}
+
 fn main() {
     let mut gc = GreedyContext::new();
+    let mut show_moves = false;
     setup_game(&mut gc);
     terminal::open("Greedy", WIDTH as u32, HEIGHT as u32);
     
     loop {
+        terminal::set_background(Color::from_rgb(0, 0, 0));
         terminal::clear(None);
         print_greedy(&gc, 0, 0);
+        if show_moves {
+            print_moves(&gc, 0, 0);
+        }
         terminal::refresh();
         let ev = terminal::wait_event().unwrap();
         match ev {
@@ -234,11 +278,19 @@ fn main() {
                     KeyCode::N => {
                         move_rogue(&mut gc, Southeast);
                     }
+                    KeyCode::V => {
+                        show_moves = !show_moves;
+                    }
                     _ => {}
                 }
             }
             Event::Close => break,
             _ => {}
+        }
+
+        if valid_moves(&gc).len() == 0 {
+            end_game(&gc, show_moves);
+            break;
         }
     }
 
